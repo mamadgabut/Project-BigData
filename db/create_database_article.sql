@@ -1,1 +1,1 @@
-CREATE DATABASE news;
+CREATE DATABASE project_bigdata_db;

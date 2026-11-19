@@ -1,6 +1,19 @@
+# Environment variables (JANGAN DIPUSH KE GITHUB)
 .env
 
-logs/*
-config/*
+# Virtual Environment
+.venv/
+env/
+venv/
 
+# Airflow runtime logs & config
+logs/
+config/simple_auth_manager_passwords.json
+
+# Python bytecode
 **/__pycache__/**
+*.py[cod]
+
+# Temporary data files (hasil scraping lokal)
+# Uncomment baris di bawah jika tidak mau track file JSON output pipeline
+# dags/script/*.json
