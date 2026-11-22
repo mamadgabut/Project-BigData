@@ -35,9 +35,23 @@ def main():
 
     articles = []
     for url in new_urls:
-        page = get_page(url)
-        articles.append(page)
-    
+        try:
+            page = get_page(url)
+            articles.append(page)
+
+        except requests.HTTPError as error:
+            if error.response is not None and error.response.status_code == 404:
+                logger.warning(
+                    "Artikel tidak ditemukan (404), dilewati: %s", url
+                )
+                continue
+
+            raise
+
+    if not articles:
+        print("Tidak ada artikel baru yang berhasil diambil.")
+        return
+
     output_path = Path(__file__).resolve().parent / "result.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(articles, f, indent=4, ensure_ascii=False)
