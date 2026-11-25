@@ -61,7 +61,7 @@ def get_index():
     max_page = 2
     
     links = []
-    for i in range(max_page):
+    for i in range(1, max_page + 1):
         url = f"{base_url}/artikel/indeks?channel=ALL&tanggal=&page={i}"
         soup = request(url)
 
@@ -120,18 +120,27 @@ def get_page(url):
     return temp
     
 def request(url):
-    USER_AGENT = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/58.0.3029.110 Safari/537.3"
-    )
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36"
+        ),
+        "Accept": (
+            "text/html,application/xhtml+xml,"
+            "application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+        ),
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": "https://voi.id/",
+        "Connection": "keep-alive",
+    }
 
     try:
         time.sleep(3)
 
         response = requests.get(
             url,
-            headers={"User-Agent": USER_AGENT},
+            headers=headers,
             timeout=10,
         )
 
