@@ -48,9 +48,10 @@ docker compose up -d
 * **Username:** `admin`
 * **Password:** `admin`
 
-Di dashboard ini terdapat 2 DAG yang sudah berjalan otomatis:
-1. **`dag_voi_bronze_pipeline`** (Collecting): Scrape berita VOI $\rightarrow$ Validasi null & duplikasi $\rightarrow$ Simpan ke tabel `bronze.articles`. Berjalan otomatis setiap **5 menit**.
-2. **`dag_voi_silver_pipeline`** (Processing): Mengambil data Bronze $\rightarrow$ Pembersihan teks, filter tag & redaksi $\rightarrow$ Simpan ke tabel `silver.articles`. Berjalan otomatis setiap **10 menit**.
+Di dashboard ini terdapat 3 DAG yang sudah berjalan otomatis:
+1. **`dag_voi_bronze_pipeline`** (`dag1_Collecting.py`): Scrape berita VOI $\rightarrow$ Validasi null & duplikasi $\rightarrow$ Simpan ke tabel `bronze.articles`. Berjalan otomatis setiap **5 menit**.
+2. **`dag_voi_silver_pipeline`** (`dag2_Processing.py`): Mengambil data Bronze $\rightarrow$ Pembersihan teks, filter tag & redaksi $\rightarrow$ Simpan ke tabel `silver.articles`. Berjalan otomatis setiap **10 menit**.
+3. **`dag_voi_gold_warehouse`** (`dag3_Warehouse.py`): Memproses data Silver menjadi Star Schema (`dim_*`, `fact_article`) dan analytics views di schema `gold`. Berjalan otomatis setiap **5 menit**.
 
 ### 2. Database Lakehouse (DBeaver / pgAdmin)
 Hubungkan database client kamu dengan konfigurasi berikut:
@@ -76,11 +77,13 @@ project-bigdata/
 ├── dags/
 │   ├── dag1_Collecting.py      # DAG 1: Scrape & Ingest ke Bronze
 │   ├── dag2_Processing.py      # DAG 2: Preprocessing Bronze ke Silver
+│   ├── dag3_Warehouse.py       # DAG 3: Load Silver ke Gold Star Schema
 │   └── script/
 │       ├── main.py             # Crawler scraper VOI
 │       ├── validate_raw.py     # Validasi NULL, duplikasi & ekstraksi hash
 │       ├── save_raw.py         # Ingestion data mentah ke Bronze DB
 │       ├── preprocessing.py    # Transformasi & Ingestion ke Silver DB
+│       ├── gold_warehouse.py   # Transformasi & Load ke Gold Warehouse
 │       └── db_connection.py    # Helper koneksi database (Docker & Host)
 ├── db/
 │   └── init_lakehouse.sql      # Inisialisasi schema & tabel Medallion
@@ -92,9 +95,45 @@ project-bigdata/
 
 ---
 
+## 🔄 Memperbarui Perubahan File di Docker
+
+Project ini menggunakan image bawaan (`apache/airflow:3.3.2` dan `postgres:17-alpine`) tanpa custom `Dockerfile`, sehingga **tidak perlu** menjalankan `docker compose build`. Langkah yang perlu dilakukan tergantung jenis file yang diubah atau ditambahkan:
+
+### 1. Perubahan / Penambahan File `.py` (`dags/` atau `dags/script/`)
+Folder `./dags` sudah terhubung langsung (*bind mount*) ke `/opt/airflow/dags` di dalam container.
+* **Tidak perlu** `docker compose build` maupun `docker compose up -d` ulang.
+* Airflow (`airflow-dag-processor`) akan mendeteksi file baru atau perubahan kode secara otomatis dalam beberapa detik.
+* Jika ingin perubahan langsung terbaca tanpa menunggu atau ada perubahan pada modul helper di `dags/script/`, jalankan:
+  ```bash
+  docker compose restart airflow-dag-processor airflow-scheduler airflow-worker
+  ```
+
+### 2. Perubahan / Penambahan File `.sql` (`db/init_lakehouse.sql`)
+File `db/init_lakehouse.sql` hanya dieksekusi **satu kali** oleh PostgreSQL saat volume database pertama kali dibuat (masih kosong). Menjalankan `docker compose up -d` saja **tidak akan** menjalankan ulang script `.sql` tersebut.
+* **Opsi A — Tanpa menghapus data yang sudah ada (Disarankan):**
+  Jalankan query SQL tambahan langsung lewat DBeaver, atau eksekusi file `.sql` ke container yang sedang berjalan:
+  ```powershell
+  Get-Content db/init_lakehouse.sql | docker exec -i postgres-lakehouse psql -U postgres -d project_bigdata_db
+  ```
+  *(Atau ganti dengan file `.sql` baru/migrasi yang ingin dijalankan).*
+* **Opsi B — Reset total database dari awal (Menghapus semua data di volume!):**
+  ```bash
+  docker compose down -v
+  docker compose up -d
+  ```
+
+### 3. Perubahan `.env`, `docker-compose.yaml`, atau Library Python (`_PIP_ADDITIONAL_REQUIREMENTS`)
+Jika mengubah environment variable, port, atau menambah library di `_PIP_ADDITIONAL_REQUIREMENTS` pada `.env`:
+```bash
+docker compose up -d
+```
+Docker Compose akan otomatis membuat ulang (*recreate*) container yang konfigurasinya berubah.
+
+---
+
 ## 🛑 Cara Menghentikan Container
 Jika selesai bekerja dan ingin menghemat RAM:
 ```bash
 docker compose down
 ```
-*(Data di database tetap aman tersimpan di volume Docker).*
+*(Data di database tetap aman tersimpan di volume Docker. Gunakan `docker compose down -v` hanya jika ingin menghapus seluruh data volume).*
