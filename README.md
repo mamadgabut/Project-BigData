@@ -96,6 +96,64 @@ project-bigdata/
 ---
 
 ## 🔄 Memperbarui Perubahan File di Docker
+## 💡 Tutorial: Menambahkan DAG Gold & Update SQL Tanpa Menghapus Data Existing
+
+Jika kamu berada di kondisi:
+* Database PostgreSQL sudah terisi data hasil scraping (**Bronze**) dan data hasil pembersihan (**Silver**).
+* Kamu menambahkan file baru:
+  * `dags/dag3_Warehouse.py`
+  * `dags/script/gold_warehouse.py`
+  * Perubahan pada `db/init_lakehouse.sql` (tabel dimensi, fakta, dan view di schema `gold`).
+* **Ingin mengaktifkannya di Docker & Airflow tanpa kehilangan data Bronze & Silver yang sudah ada.**
+
+Berikut langkah-langkah yang harus kamu jalankan:
+
+### ⚠️ PERINGATAN PENTING
+> [!CAUTION]
+> **JANGAN JALANKAN `docker compose down -v`!**
+> Perintah dengan bendera `-v` (*volume*) akan **menghapus volume database Docker secara permanen**, sehingga semua data Bronze dan Silver yang sudah kamu kumpulkan akan hilang. Cukup biarkan container tetap berjalan atau gunakan `docker compose restart`.
+
+---
+
+### Langkah 1: Terapkan Skema Baru ke Database (Pilih salah satu)
+
+#### 🔹 Cara A: Otomatis via DAG (Paling Direkomendasikan)
+Kamu sebenarnya **tidak perlu menjalankan query SQL apapun secara manual**.
+Di dalam `dag3_Warehouse.py`, task kedua adalah `ensure_gold_schema_task` yang memanggil fungsi `ensure_gold_schema()` di `gold_warehouse.py`. Fungsi ini sudah dirancang dengan sintaks `CREATE TABLE IF NOT EXISTS`, sehingga saat DAG 3 pertama kali dijalankan, seluruh tabel dimensi (`dim_category`, `dim_date`, `dim_reporter`, `dim_editor`), tabel fakta (`fact_article`), dan views akan otomatis dibuat tanpa menyentuh data Bronze & Silver.
+
+#### 🔹 Cara B: Manual via Terminal PowerShell
+Jika kamu ingin membuat tabel Gold di database terlebih dahulu sebelum Airflow berjalan:
+```powershell
+Get-Content db/init_lakehouse.sql | docker exec -i postgres-lakehouse psql -U postgres -d project_bigdata_db
+```
+*(Seluruh query di `init_lakehouse.sql` bersifat idempotent/aman karena menggunakan `CREATE TABLE IF NOT EXISTS`).*
+
+---
+
+### Langkah 2: Refresh Airflow untuk Membaca File Python Baru
+
+Karena folder `./dags` terhubung secara *live* (*bind mount*) ke dalam container Docker, kamu **TIDAK PERLU** menjalankan `docker compose build` ataupun mematikan docker.
+
+Agar Airflow langsung mendeteksi file `dag3_Warehouse.py` dan helper `gold_warehouse.py` tanpa menunggu interval scheduler, jalankan perintah berikut di terminal:
+
+```bash
+docker compose restart airflow-dag-processor airflow-scheduler airflow-worker
+```
+
+Perintah di atas hanya me-restart proses pembaca DAG dan worker Airflow dalam beberapa detik, **tanpa mematikan database** (`postgres-lakehouse`), sehingga data dan koneksi tetap aman.
+
+---
+
+### Langkah 3: Aktifkan DAG di Webserver Airflow
+1. Buka browser dan masuk ke [http://localhost:8085](http://localhost:8085).
+2. Temukan DAG baru: **`dag_voi_gold_warehouse`**.
+3. Klik tombol toggle switch menjadi **ON** (Unpause).
+4. Klik tombol **Trigger DAG** (ikon Play `▶`) jika ingin langsung memproses data Silver yang sudah ada ke schema Gold tanpa menunggu jadwal cron berjalan.
+5. Cek tabel di DBeaver pada schema `gold`: `dim_category`, `dim_date`, `dim_reporter`, `dim_editor`, dan `fact_article` kini sudah terisi!
+
+---
+
+## 🔄 Panduan Umum Pembaruan File di Docker
 
 Project ini menggunakan image bawaan (`apache/airflow:3.3.2` dan `postgres:17-alpine`) tanpa custom `Dockerfile`, sehingga **tidak perlu** menjalankan `docker compose build`. Langkah yang perlu dilakukan tergantung jenis file yang diubah atau ditambahkan:
 
